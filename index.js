@@ -140,7 +140,7 @@ function handleAvailable({ msg }) {
           for(let region of Object.keys(regions)) {
               data.push([region, `${regions[region].AVAILABLE}/${regions[region].COUNT}`])
           }
-          msg.channel.send('`\n' + table(data).split('\n').filter(l => !!l).join('`\n`') + '`')
+          msg.channel.send('\n`' + table(data).split('\n').filter(l => !!l).join('`\n`') + '`')
       })
       .catch(e => {
           console.error(e)
@@ -159,7 +159,7 @@ function handleServers({ msg }) {
             res.data.forEach(s => {
                 data.push([s.id, `${s.ip}:${s.port}`, s.rconpassword, s.region, s.UrTServerStatus.status])
             })
-            msg.channel.send('`\n' + table(data).split('\n').filter(l => !!l).join('`\n`') + '`')
+            msg.channel.send('\n`' + table(data).split('\n').filter(l => !!l).join('`\n`') + '`')
         })
         .catch(e => {
             console.error(e)
