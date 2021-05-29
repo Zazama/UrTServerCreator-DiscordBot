@@ -82,7 +82,7 @@ function parseCommands({ commands = [], msg }) {
             if(commands.length < 3) {
                 handleWrongCommand({msg, command: 'rcon'})
             } else {
-                let re = new RegExp(prefix + '[\\s]+rcon[\\s]+(?:.*?)[\\s]+(.*)', 'g')
+                let re = new RegExp(prefix + '[\\s]*rcon[\\s]+(?:.*?)[\\s]+(.*)', 'g')
                 let exec = re.exec(msg.content)
                 if(exec && exec[1]) {
                     handleRcon({ msg, id: commands[1], command: exec[1] })
@@ -140,7 +140,7 @@ function handleAvailable({ msg }) {
           for(let region of Object.keys(regions)) {
               data.push([region, `${regions[region].AVAILABLE}/${regions[region].COUNT}`])
           }
-          msg.channel.send('\n`' + table(data).split('\n').filter(l => !!l).join('`\n`') + '`')
+          msg.channel.send('```' + table(data) + '```')
       })
       .catch(e => {
           console.error(e)
@@ -159,7 +159,7 @@ function handleServers({ msg }) {
             res.data.forEach(s => {
                 data.push([s.id, `${s.ip}:${s.port}`, s.rconpassword, s.region, s.UrTServerStatus.status])
             })
-            msg.channel.send('\n`' + table(data).split('\n').filter(l => !!l).join('`\n`') + '`')
+            msg.channel.send('```' + table(data) + '```')
         })
         .catch(e => {
             console.error(e)
