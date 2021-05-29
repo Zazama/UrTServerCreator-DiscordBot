@@ -1,0 +1,6 @@
+{
+  "discord_token": "",
+  "api_bearer_token": "",
+  "api_url": "http://localhost:3005",
+  "prefix": "!s"
+}
