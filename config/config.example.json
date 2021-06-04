@@ -2,5 +2,7 @@
   "discord_token": "",
   "api_bearer_token": "",
   "api_url": "http://localhost:3005",
-  "prefix": "!s"
+  "prefix": "!s",
+  "allow_random_region": false,
+  "custom_admin_ids": []
 }

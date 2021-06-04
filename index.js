@@ -1,8 +1,9 @@
-const Discord = require('discord.js');
-const Axios = require('axios');
-const { table } = require('table');
-const client = new Discord.Client();
+const Discord = require('discord.js')
+const Axios = require('axios')
+const { table } = require('table')
+const client = new Discord.Client()
 const config = require('./config/config.json')
+const fs = require('fs')
 
 const axios = Axios.create({
     baseURL: `${config.api_url}/bot`,
@@ -12,10 +13,15 @@ const axios = Axios.create({
 })
 
 client.on('ready', () => {
-  console.log(`Logged in as ${client.user.tag}!`);
-});
+  console.log(`Logged in as ${client.user.tag}!`)
+})
 
 const prefix = config.prefix + ' '
+let strings = Object.entries(require(fs.existsSync('./config/strings.json') ? './config/strings.json' : './config/strings.example.json')).reduce((acc, entry) => {
+    acc[entry[0]] = entry[1].replace(/%prefix%/g, config.prefix)
+    return acc
+}, {})
+
 client.on('message', msg => {
     if(msg.author.bot || msg.channel.type !== 'text') return
     if(!msg.content.startsWith(prefix)) return
@@ -29,14 +35,14 @@ client.on('message', msg => {
 
 function parseCommands({ commands = [], msg }) {
     if(commands.length === 0) {
-        msg.channel.send('What do you want?')
+        return
     }
 
     switch (commands[0]) {
         case 'start':
             if(commands.length === 2) {
                 handleServerStart({ msg, region: commands[1] })
-            } else if(commands.length === 1) {
+            } else if(commands.length === 1 && config.allow_random_region) {
                 handleServerStart({ msg })
             } else {
                 handleWrongCommand({ msg, command: 'start' })
@@ -100,11 +106,14 @@ function parseCommands({ commands = [], msg }) {
 function handleHelp({ msg }) {
     let helpString = `**Available commands:**
 ${prefix} available
-${prefix} start
-${prefix} start <region>
+`
+    if(config.allow_random_region) {
+        helpString += `${prefix} start\n`
+    }
+helpString += `${prefix} start <region>
 ${prefix} stop`
 
-    if(msg.member.hasPermission('ADMINISTRATOR')) {
+    if(fromAdmin({ msg })) {
         helpString += `
 
 **Admin commands**:
@@ -131,7 +140,7 @@ function handleAvailable({ msg }) {
                       COUNT: 0
                   }
               }
-              if(server.status === 'AVAILABLE') {
+              if(server.UrTServerStatus && server.UrTServerStatus.status === 'AVAILABLE') {
                   regions[server.region].AVAILABLE += 1
               }
               regions[server.region].COUNT += 1
@@ -144,31 +153,35 @@ function handleAvailable({ msg }) {
       })
       .catch(e => {
           console.error(e)
-          msg.channel.send('There was an error reaching the backend.')
+          msg.channel.send(strings.API_ERROR)
       })
 }
 
 function handleServers({ msg }) {
-    if(!msg.member.hasPermission('ADMINISTRATOR')) {
+    if(!fromAdmin({ msg })) {
         return
     }
     axios
         .get(`/server/${msg.guild.id}/pool`)
         .then((res) => {
             let data = [['ID', 'Address', 'RCON', 'Region', 'Status']]
+            let inUse = []
             res.data.forEach(s => {
                 data.push([s.id, `${s.ip}:${s.port}`, s.rconpassword, s.region, s.UrTServerStatus.status])
+                if(s.UrTServerStatus.status === 'IN_USE') {
+                    inUse.push([`[${s.id}] /connect ${s.ip}; password ${s.UrTServerStatus.password}; rconpassword ${s.rconpassword}`])
+                }
             })
-            msg.channel.send('```' + table(data) + '```')
+            msg.channel.send('```' + table(data) + '\n\n' + inUse.join('\n') + '```')
         })
         .catch(e => {
             console.error(e)
-            msg.channel.send('There was an error reaching the backend.')
+            msg.channel.send(strings.API_ERROR)
         })
 }
 
 function handleAdd({ msg, ip, port, rconpassword, region }) {
-    if(!msg.member.hasPermission('ADMINISTRATOR')) {
+    if(!fromAdmin({ msg })) {
         return
     }
 
@@ -177,35 +190,35 @@ function handleAdd({ msg, ip, port, rconpassword, region }) {
           ip, port, rconpassword, region
       })
       .then((res) => {
-          msg.channel.send('Server added successfully.')
+          msg.channel.send(strings.SERVER_ADDED_SUCCESS)
       })
       .catch(e => {
           console.error(e.response)
-          msg.channel.send('There was an error reaching the backend.')
+          msg.channel.send(strings.API_ERROR)
       })
 }
 
 function handleDelete({ msg, id }) {
-    if(!msg.member.hasPermission('ADMINISTRATOR')) {
+    if(!fromAdmin({ msg })) {
         return
     }
 
     axios
       .delete(`/server/${msg.guild.id}/pool/${id}`)
       .then((res) => {
-          msg.channel.send('Server removed successfully.')
+          msg.channel.send(strings.SERVER_REMOVED_SUCCESS)
       })
       .catch(e => {
           if(e.response && e.response.status && e.response.status === 404) {
-              msg.channel.send('This server does not exist.')
+              msg.channel.send(strings.SERVER_NOT_FOUND)
           } else {
-              msg.channel.send('There was an error reaching the backend.')
+              msg.channel.send(strings.API_ERROR)
           }
       })
 }
 
 function handleRcon({ msg, id, command }) {
-    if(!msg.member.hasPermission('ADMINISTRATOR')) {
+    if(!fromAdmin({ msg })) {
         return
     }
 
@@ -219,9 +232,9 @@ function handleRcon({ msg, id, command }) {
       .catch((e) => {
           console.log(e)
           if(e.response && e.response.status && e.response.status === 404) {
-              msg.channel.send('This server does not exist.')
+              msg.channel.send(strings.SERVER_NOT_FOUND)
           } else {
-              msg.channel.send('There was an error reaching the backend.')
+              msg.channel.send(strings.API_ERROR)
           }
       })
 }
@@ -229,7 +242,7 @@ function handleRcon({ msg, id, command }) {
 function handleServerStart({ msg, region }) {
     requestServer({ serverId: msg.guild.id, userId: msg.author.id, region })
         .then(() => {
-            msg.channel.send('Your server is getting configured! You will get a DM with the IP address when it is ready.')
+            msg.channel.send(strings.SERVER_STARTED)
         })
         .catch((err) => {
             msg.channel.send(err)
@@ -246,19 +259,19 @@ async function requestServer({ serverId, userId, region }) {
         if(e.response && e.response.data) {
             switch(e.response.data.error) {
                 case 'NO_SERVER_AVAILABLE':
-                    throw 'There are no servers available right now, sorry!'
+                    throw strings.NO_SERVER_AVAILABLE
                 case 'ALREADY_REQUESTED_SERVER':
-                    throw `You already have a server running.\n\nTry ${prefix} stop`
+                    throw strings.USER_SERVERLIMIT_REACHED
             }
         }
-        throw 'We are unable to request a server for you right now, sorry!'
+        throw strings.SERVER_REQUEST_ERROR
     }
 }
 
 function handleServerStop({ msg }) {
     stopServer({ serverId: msg.guild.id, userId: msg.author.id })
         .then(() => {
-            msg.channel.send('Thanks! We hope you enjoyed your game :)')
+            msg.channel.send(strings.SERVER_STOPPED)
         })
         .catch((err) => {
             msg.channel.send(err)
@@ -274,10 +287,10 @@ async function stopServer({ serverId, userId }) {
         if(e.response && e.response.status) {
             switch (e.response.status) {
                 case 404:
-                    throw 'You don\'t have a server allocated for removal.'
+                    throw strings.SERVER_STOP_NOT_FOUND
             }
         }
-        throw 'There was an error trying to stop your server. Please try again later.'
+        throw strings.SERVER_STOP_ERROR
     }
 }
 
@@ -333,7 +346,11 @@ Your server will be available for the next two hours.`)
 }
 
 function handleWrongCommand({ msg, command }) {
-    msg.channel.send('You\'ve entered a wrong command.')
+    msg.channel.send(strings.WRONG_COMMAND)
+}
+
+function fromAdmin({ msg }) {
+    return msg.member.hasPermission('ADMINISTRATOR') || (config.custom_admin_ids.indexOf(msg.author.id) !== -1)
 }
 
 client.login(config.discord_token);
