@@ -229,7 +229,7 @@ function handleRcon({ msg, id, command }) {
 function handleServerStart({ msg, region }) {
     requestServer({ serverId: msg.guild.id, userId: msg.author.id, region })
         .then(() => {
-            msg.channel.send('Your server is queueing for creation! You will get a direct message with the IP address after it has started.')
+            msg.channel.send('Your server is getting configured! You will get a DM with the IP address when it is ready.')
         })
         .catch((err) => {
             msg.channel.send(err)
@@ -258,7 +258,7 @@ async function requestServer({ serverId, userId, region }) {
 function handleServerStop({ msg }) {
     stopServer({ serverId: msg.guild.id, userId: msg.author.id })
         .then(() => {
-            msg.channel.send('Thanks! Your server will be shut down...')
+            msg.channel.send('Thanks! We hope you enjoyed your game :)')
         })
         .catch((err) => {
             msg.channel.send(err)
@@ -300,7 +300,7 @@ async function collectServers() {
                 await user.send(
 `Your server is ready!
 
-/connect ${address}; password ${password}
+**connect ${address}; password ${password}**
 
 /reflogin ${refpass}
 
@@ -319,17 +319,10 @@ async function collectServers() {
 /ref cyclemap
 
 **Configs**
-/ref exec uz2v2
-/ref exec uz5v5bomb
-/ref exec uz5v5cah
 /ref exec uz5v5ctf
-/ref exec uz5v5ft
-/ref exec uz5v5ftl
-/ref exec uz5v5nowave
-/ref exec uz5v5tdm
-/ref exec uz5v5ts
+(uz2v2, uz5v5bm, uz5v5cah, uz5v5ctf, uz5v5ft, uz5v5ftl, uz5v5nowave, uz5v5tdm, uz5v5ts, ncbomb, ncctf, ncts, knockout, skeetshoot)
 
-Your server will be online for the next two hours.`)
+Your server will be available for the next two hours.`)
             } catch(e) {
                 console.error(e)
             }
