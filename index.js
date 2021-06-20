@@ -4,6 +4,13 @@ const { table } = require('table')
 const client = new Discord.Client()
 const config = require('./config/config.json')
 const fs = require('fs')
+const sqlite3 = require('sqlite3').verbose();
+
+if (!fs.existsSync('./database')) {
+    fs.mkdirSync('./database');
+}
+const db = new sqlite3.Database('./database/database.db');
+db.run("CREATE TABLE IF NOT EXISTS channels (channelId TEXT PRIMARY KEY, type TEXT)");
 
 const axios = Axios.create({
     baseURL: `${config.api_url}/bot`,
@@ -22,88 +29,128 @@ let strings = Object.entries(require(fs.existsSync('./config/strings.json') ? '.
     return acc
 }, {})
 
-client.on('message', msg => {
+client.on('message', async (msg) => {
     if(msg.author.bot || msg.channel.type !== 'text') return
     if(!msg.content.startsWith(prefix)) return
+
+    let dbChannel
+    try {
+        dbChannel = await getChannelDbInfo({channelId: msg.channel.id})
+    } catch(e) {
+        console.error(e);
+        return msg.channel.send('Could not process your message.')
+    }
+
     let commands = msg.content
-        .substring(prefix.length)
-        .trim()
-        .replace(/\s\s+/g, ' ')
-        .split(' ')
-    parseCommands({ commands, msg })
+      .substring(prefix.length)
+      .trim()
+      .replace(/\s\s+/g, ' ')
+      .split(' ')
+    parseCommands({ commands, msg, dbChannel })
 });
 
-function parseCommands({ commands = [], msg }) {
+function parseCommands({ commands = [], msg, dbChannel }) {
     if(commands.length === 0) {
         return
     }
 
-    switch (commands[0]) {
+    switch(commands[0]) {
         case 'start':
-            if(commands.length === 2) {
-                handleServerStart({ msg, region: commands[1] })
-            } else if(commands.length === 1 && config.allow_random_region) {
-                handleServerStart({ msg })
-            } else {
-                handleWrongCommand({ msg, command: 'start' })
-            }
+            handlePublicCommand(handleServerStart, { msg, commands, dbChannel})
             break
         case 'stop':
-            if(commands.length !== 1) {
-                handleWrongCommand({ msg, command: 'stop' })
-            } else {
-                handleServerStop({ msg })
-            }
-            break
-        case 'servers':
-            handleServers({ msg })
+            handlePublicCommand(handleServerStop, { msg, commands, dbChannel})
             break
         case 'available':
-            handleAvailable({ msg })
-            break
-        case 'add':
-            if(commands.length !== 4 && commands.length !== 5) {
-                handleWrongCommand({msg, command: 'add'})
-            } else {
-                handleAdd({
-                    msg,
-                    ip: commands[1],
-                    port: commands[2],
-                    rconpassword: commands[3],
-                    region: commands[4]
-                })
-            }
-            break
-        case 'delete':
-            if(commands.length !== 2) {
-                handleWrongCommand({msg, command: 'delete'})
-            } else {
-                handleDelete({
-                    msg,
-                    id: commands[1]
-                })
-            }
-            break
-        case 'rcon':
-            if(commands.length < 3) {
-                handleWrongCommand({msg, command: 'rcon'})
-            } else {
-                let re = new RegExp(prefix + '[\\s]*rcon[\\s]+(?:.*?)[\\s]+(.*)', 'g')
-                let exec = re.exec(msg.content)
-                if(exec && exec[1]) {
-                    handleRcon({ msg, id: commands[1], command: exec[1] })
-                }
-            }
+            handlePublicCommand(handleAvailable, { msg, commands, dbChannel})
             break
         case 'help':
-            handleHelp({ msg })
+            handlePublicCommand(handleHelp, { msg, commands, dbChannel})
+            break
+        case 'servers':
+            handleAdminCommand(handleServers, { msg, commands, dbChannel})
+            break
+        case 'add':
+            handleAdminCommand(handleAdd, { msg, commands, dbChannel})
+            break
+        case 'delete':
+            handleAdminCommand(handleDelete, { msg, commands, dbChannel})
+            break
+        case 'rcon':
+            handleAdminCommand(handleRcon, { msg, commands, dbChannel})
+            break
+        case 'channel':
+            handleChannelCommand({ msg, commands })
             break
         default:
             handleWrongCommand({ msg })
     }
 }
 
-function handleHelp({ msg }) {
+function handlePublicCommand(fn, { msg, commands, dbChannel }) {
+    if(!dbChannel || (dbChannel.type !== 'PUBLIC' && dbChannel.type !== 'ADMIN')) {
+        return msg.channel.send(strings.WRONG_CHANNEL)
+    }
+
+    fn({ msg, commands, dbChannel })
+}
+
+function handleAdminCommand(fn, { msg, commands, dbChannel }) {
+    if(!dbChannel) {
+        return msg.channel.send(strings.WRONG_CHANNEL)
+    }
+    if(dbChannel.type !== 'ADMIN') {
+        return msg.channel.send(strings.CHANNEL_NOT_ADMIN)
+    }
+
+    fn({ msg, commands })
+}
+
+function handleChannelCommand({ msg, commands = []}) {
+    if(!fromAdmin({ msg })) {
+        return
+    }
+
+    switch(commands[1]) {
+        case 'public':
+            setChannelDbInfo({ channelId: msg.channel.id, type: 'PUBLIC' })
+              .then(() => {
+                  msg.channel.send('Channel set to public.')
+              })
+              .catch(() => {
+                  msg.channel.send('Unable to set channel to public.')
+              })
+            break
+        case 'admin':
+            setChannelDbInfo({ channelId: msg.channel.id, type: 'ADMIN' })
+              .then(() => {
+                  msg.channel.send('Channel set to admin.')
+              })
+              .catch(() => {
+                  msg.channel.send('Unable to set channel to admin.')
+              })
+            break
+        case 'remove':
+            removeChannelDbInfo({ channelId: msg.channel.id })
+              .then(() => {
+                  msg.channel.send('Channel removed.')
+              })
+              .catch(() => {
+                  msg.channel.send('Unable to remove channel.')
+              })
+            break
+        case 'list':
+            getChannelsDbInfo({ msg })
+              .then((rows) => {
+                  msg.channel.send(JSON.stringify(rows))
+              })
+            break
+        default:
+            return handleWrongCommand({ msg, command: commands[0] })
+    }
+}
+
+function handleHelp({ msg, dbChannel }) {
     let helpString = `**Available commands:**
 ${prefix} available
 `
@@ -113,7 +160,7 @@ ${prefix} available
 helpString += `${prefix} start <region>
 ${prefix} stop`
 
-    if(fromAdmin({ msg })) {
+    if(fromAdmin({ msg }) || (dbChannel && dbChannel.type === 'ADMIN')) {
         helpString += `
 
 **Admin commands**:
@@ -121,6 +168,7 @@ ${prefix} servers
 ${prefix} add <ip> <port> <rconpassword> <optional region>
 ${prefix} delete <id>
 ${prefix} rcon <id> <command>
+${prefix} channel <public|admin|remove>
 `
     }
 
@@ -158,9 +206,6 @@ function handleAvailable({ msg }) {
 }
 
 function handleServers({ msg }) {
-    if(!fromAdmin({ msg })) {
-        return
-    }
     axios
         .get(`/server/${msg.guild.id}/pool`)
         .then((res) => {
@@ -180,10 +225,15 @@ function handleServers({ msg }) {
         })
 }
 
-function handleAdd({ msg, ip, port, rconpassword, region }) {
-    if(!fromAdmin({ msg })) {
-        return
+function handleAdd({ msg, commands = [] }) {
+    if(commands.length !== 4 && commands.length !== 5) {
+        return handleWrongCommand({msg, command: commands[0]})
     }
+
+    let ip = commands[1]
+    let port = commands[2]
+    let rconpassword = commands[3]
+    let region = commands[4]
 
     axios
       .post(`/server/${msg.guild.id}/pool`, {
@@ -198,10 +248,12 @@ function handleAdd({ msg, ip, port, rconpassword, region }) {
       })
 }
 
-function handleDelete({ msg, id }) {
-    if(!fromAdmin({ msg })) {
-        return
+function handleDelete({ msg, commands = [] }) {
+    if(commands.length !== 2) {
+        return handleWrongCommand({msg, command: commands[0]})
     }
+
+    let id = commands[1]
 
     axios
       .delete(`/server/${msg.guild.id}/pool/${id}`)
@@ -217,17 +269,25 @@ function handleDelete({ msg, id }) {
       })
 }
 
-function handleRcon({ msg, id, command }) {
-    if(!fromAdmin({ msg })) {
-        return
+function handleRcon({ msg, commands = [] }) {
+    if(commands.length < 3) {
+        return handleWrongCommand({msg, command: commands[0]})
     }
+    let re = new RegExp(prefix + '[\\s]*rcon[\\s]+(?:.*?)[\\s]+(.*)', 'g')
+    let exec = re.exec(msg.content)
+    if(!exec || !exec[1]) {
+        return handleWrongCommand({msg, command: 'rcon'})
+    }
+
+    let id = commands[1]
+    let command = exec[1]
 
     axios
       .post(`/server/${msg.guild.id}/pool/${id}/rcon`, {
           command
       })
       .then((res) => {
-          msg.channel.send('```\n' + res.data.data + '\n```')
+          msg.channel.send('```\n' + res.data.data.substring(0, 1900) + '\n```')
       })
       .catch((e) => {
           console.log(e)
@@ -239,7 +299,11 @@ function handleRcon({ msg, id, command }) {
       })
 }
 
-function handleServerStart({ msg, region }) {
+function handleServerStart({ msg, commands = [] }) {
+    if(commands.length !== 2 || (commands.length === 1 && !config.allow_random_region)) {
+        return handleWrongCommand({ msg, command: commands[0]})
+    }
+    let region = commands.length === 2 ? commands[1] : undefined
     requestServer({ serverId: msg.guild.id, userId: msg.author.id, region })
         .then(() => {
             msg.channel.send(strings.SERVER_STARTED)
@@ -268,7 +332,10 @@ async function requestServer({ serverId, userId, region }) {
     }
 }
 
-function handleServerStop({ msg }) {
+function handleServerStop({ msg, commands = [] }) {
+    if(commands.length !== 1) {
+        return handleWrongCommand({ msg, commands: commands[0] })
+    }
     stopServer({ serverId: msg.guild.id, userId: msg.author.id })
         .then(() => {
             msg.channel.send(strings.SERVER_STOPPED)
@@ -351,6 +418,61 @@ function handleWrongCommand({ msg, command }) {
 
 function fromAdmin({ msg }) {
     return msg.member.hasPermission('ADMINISTRATOR') || (config.custom_admin_ids.indexOf(msg.author.id) !== -1)
+}
+
+function setChannelDbInfo({ channelId, type }) {
+    return new Promise((resolve, reject) => {
+        if(!type || ['PUBLIC', 'ADMIN'].indexOf(type) === -1) {
+            type = 'PUBLIC'
+        }
+        db.run(`INSERT OR REPLACE INTO channels(channelId, type) VALUES(?, ?)`, [channelId, type], (err) => {
+            if(err) {
+                reject(err)
+            } else {
+                resolve()
+            }
+        })
+    })
+}
+
+function removeChannelDbInfo({ channelId }) {
+    return new Promise((resolve, reject) => {
+        db.run(`DELETE FROM channels WHERE channelId = ?`, [channelId], (err) => {
+            if(err) {
+                reject(err)
+            } else {
+                resolve()
+            }
+        })
+    })
+}
+
+function getChannelDbInfo({ channelId }) {
+    return new Promise((resolve, reject) => {
+        if(!channelId) {
+            reject()
+        }
+        db.get(`SELECT * FROM channels WHERE channelId = ?`, [channelId], (err, row) => {
+            if(err) {
+                reject(err)
+            }
+            resolve(row)
+        })
+    })
+}
+
+function getChannelsDbInfo({ msg }) {
+    return new Promise((resolve, reject) => {
+        if(!msg.channel.id) {
+            reject()
+        }
+        db.all(`SELECT * FROM channels`, (err, rows) => {
+            if(err) {
+                reject(err)
+            }
+            resolve(rows)
+        })
+    })
 }
 
 client.login(config.discord_token);

@@ -10,5 +10,7 @@
   "SERVER_STOP_NOT_FOUND": "You don't have a server allocated for removal.",
   "SERVER_STOP_ERROR": "There was an error trying to stop your server. Please try again later.",
   "NO_SERVER_AVAILABLE": "There are no servers available right now, sorry!",
-  "USER_SERVERLIMIT_REACHED": "You already have a server running.\n\nTry %prefix% stop first."
+  "USER_SERVERLIMIT_REACHED": "You already have a server running.\n\nTry %prefix% stop first.",
+  "WRONG_CHANNEL": "You are in the wrong channel.",
+  "CHANNEL_NOT_ADMIN": "This channel is not whitelisted for admin commands."
 }
