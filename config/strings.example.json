@@ -5,7 +5,7 @@
   "SERVER_NOT_FOUND": "This server does not exist.",
   "SERVER_ADDED_SUCCESS": "Server added successfully.",
   "SERVER_REMOVED_SUCCESS": "Server removed successfully.",
-  "SERVER_STARTED": "Your server is getting configured! You will get a DM with the IP address when it is ready.",
+  "SERVER_STARTED": "Your server is getting configured! I will DM you the IP address when it is ready.",
   "SERVER_STOPPED": "Thanks! We hope you enjoyed your game :)",
   "SERVER_STOP_NOT_FOUND": "You don't have a server allocated for removal.",
   "SERVER_STOP_ERROR": "There was an error trying to stop your server. Please try again later.",
