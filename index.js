@@ -214,7 +214,7 @@ function handleServers({ msg }) {
             res.data.forEach(s => {
                 data.push([s.id, `${s.ip}:${s.port}`, s.rconpassword, s.region, s.UrTServerStatus.status])
                 if(s.UrTServerStatus.status === 'IN_USE') {
-                    inUse.push([`[${s.id}] /connect ${s.ip}; password ${s.UrTServerStatus.password}; rconpassword ${s.rconpassword}`])
+                    inUse.push([`[${s.id}] /connect ${s.ip};password ${s.UrTServerStatus.password};rconpassword ${s.rconpassword}`])
                 }
             })
             msg.channel.send('```' + table(data) + '\n\n' + inUse.join('\n') + '```')
@@ -378,29 +378,23 @@ async function collectServers() {
             try {
                 const user = await client.users.fetch(userDiscordId)
                 await user.send(
-`Your server is ready!
+`Your server is ready :muscle:
 
-**connect ${address}; password ${password}**
+**connect ${address};password ${password}**
 
 /reflogin ${refpass}
 
 **Administration**
-/ref mute <player>
-/ref forceteam <player>
 /ref kick <player>
-/ref ban <player>
-/ref veto
-/ref swap
 /ref reload
 /ref restart
-/ref pause
 /ref map <map>
-/ref nextmap <map>
-/ref cyclemap
 
 **Configs**
 /ref exec uz5v5ctf
-(uz2v2, uz5v5bm, uz5v5cah, uz5v5ctf, uz5v5ft, uz5v5ftl, uz5v5nowave, uz5v5tdm, uz5v5ts, ncbomb, ncctf, ncts, knockout, skeetshoot)
+(uz5v5bm, uz5v5cah, uz5v5ft, uz5v5ftl, uz5v5nowave, uz5v5ts, ncbomb, ncctf, ncts, knockout, skeetshoot, utcs_fall21_ts, utcs_fall21_ctf)
+
+Try */ref help* for more commands.
 
 Your server will be available for the next two hours.`)
             } catch(e) {
